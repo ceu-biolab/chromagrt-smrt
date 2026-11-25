@@ -1,4 +1,4 @@
-"""Train ChromaGRT on one frozen ESANN fold with RT/duration."""
+"""Train ChromaGRT on one frozen benchmark fold with RT/duration."""
 
 import argparse
 import json
