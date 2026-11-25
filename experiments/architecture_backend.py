@@ -24,7 +24,8 @@ def build_loader(frame, columns, scaler, config, shuffle=False, predicting=False
     return published._build_loader(frame, columns, scaler, config, shuffle=shuffle)
 
 
-def train_chromagrt(train_df, val_df, param_dict, results_path, using_moldescs=False, save_model=True):
+def train_chromagrt(train_df, val_df, param_dict, results_path, using_moldescs=False, save_model=True,
+                    training_sampler=None, pretrained_checkpoint=None):
     config = published._config_from_param_dict(param_dict)
     architecture = Architecture.from_config(config)
     config.update(architecture.as_dict())
@@ -56,7 +57,26 @@ def train_chromagrt(train_df, val_df, param_dict, results_path, using_moldescs=F
     # Match the published initialization order: loaders, then model.
     train_loader = build_loader(train_df, columns, scaler, config, shuffle=True)
     valid_loader = build_loader(val_df, columns, scaler, config)
+    if training_sampler is not None:
+        from torch.utils.data import DataLoader
+
+        train_loader = DataLoader(
+            train_loader.dataset, batch_size=train_loader.batch_size,
+            collate_fn=train_loader.collate_fn, sampler=training_sampler,
+        )
     model = model_class(**model_args)
+    if pretrained_checkpoint is not None:
+        import json
+        from pathlib import Path
+
+        from transfer_baseline_policy import POLICY, validate_config
+        from transfer_core import initialize_transfer
+
+        config.update(transfer_lr_profile=POLICY['name'], transfer_lr_policy=POLICY)
+        validate_config(config)
+        audit = initialize_transfer(model, pretrained_checkpoint, columns, {}, 'molecular')
+        audit['optimization'] = POLICY
+        (Path(results_path) / 'transfer_audit.json').write_text(json.dumps(audit, indent=2) + '\n')
     info = dict(architecture=architecture.as_dict(), architecture_label=architecture.label,
                 metadata_n_parameters=sum(p.numel() for p in model.parameters()))
     config.update(info)
